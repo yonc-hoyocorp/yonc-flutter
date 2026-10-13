@@ -137,7 +137,7 @@ class ModelCard extends StatelessWidget {
   Widget build(BuildContext context) => Card(
     child: Padding(
       padding: const EdgeInsets.all(16),
-      child: StreamBuilder<String?>(
+      child: StreamBuilder<ModelId?>(
         stream: models.defaultModelId,
         builder: (context, defaultId) => StreamBuilder<List<ModelEntry>>(
           stream: models.entries,
