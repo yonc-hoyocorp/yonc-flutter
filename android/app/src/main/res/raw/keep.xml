@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The notification icon is named only in Dart code, which the release build's resource shrinker
+     cannot see; without this it would remove it and the notification would fall back to the SDK's
+     icon. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_stat_example" />
