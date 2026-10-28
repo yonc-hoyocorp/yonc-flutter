@@ -57,7 +57,7 @@ class _HomePageState extends State<HomePage> {
       // Once per process; every later call with the same arguments returns the same handle.
       final Yonc yonc = await Yonc.create(
         name: 'yonc-flutter-example',
-        version: '0.5.0',
+        version: '0.6.0',
         attestation: attested
             ? const AttestationConfig(
                 applicationId: applicationId,
@@ -108,6 +108,7 @@ class _HomePageState extends State<HomePage> {
               padding: const EdgeInsets.all(12),
               children: <Widget>[
                 ModelCard(models: yonc.models, onError: _say),
+                ChatCard(yonc: yonc, onError: _say),
                 TurboCard(turbo: yonc.turbo, onError: _say),
                 if (yonc.backgroundWork case final BackgroundWork work)
                   PromptsCard(work: work, onError: _say),
@@ -140,7 +141,7 @@ class ModelCard extends StatelessWidget {
       child: StreamBuilder<ModelId?>(
         stream: models.defaultModelId,
         builder: (context, defaultId) => StreamBuilder<List<ModelEntry>>(
-          stream: models.entries,
+          stream: models.models,
           builder: (context, entries) {
             final List<ModelEntry> all = entries.data ?? <ModelEntry>[];
             final ModelEntry? entry = all
@@ -213,6 +214,210 @@ class ModelCard extends StatelessWidget {
           },
         ),
       ),
+    ),
+  );
+}
+
+/// On-device chat with the downloaded model. The SDK keeps the history and builds every prompt;
+/// the card hands it the next message and renders what comes back. Nothing leaves the phone.
+class ChatCard extends StatefulWidget {
+  const ChatCard({super.key, required this.yonc, required this.onError});
+
+  final Yonc yonc;
+  final void Function(String) onError;
+
+  @override
+  State<ChatCard> createState() => _ChatCardState();
+}
+
+class _ChatCardState extends State<ChatCard> {
+  final TextEditingController _draft = TextEditingController();
+
+  /// The open conversation. The SDK keeps its history and builds every prompt from it.
+  LocalChatSession? _session;
+  StreamSubscription<TokenEvent>? _reply;
+
+  /// The committed exchanges, answer text only, as the SDK keeps them.
+  List<ChatMessage> _history = <ChatMessage>[];
+
+  /// The message in flight and its answer so far; null between replies.
+  String? _question;
+  String _answer = '';
+  String? _error;
+
+  @override
+  void dispose() {
+    _reply?.cancel();
+    _session?.close();
+    _draft.dispose();
+    super.dispose();
+  }
+
+  /// Sends the draft in the open conversation, opening one on the first downloaded model when
+  /// none is open. Events flagged as thinking (models that reason) are dropped here; a real app
+  /// may show them folded away. One turn at a time per session.
+  Future<void> _send() async {
+    final String message = _draft.text.trim();
+    final ModelLocal? local = widget.yonc.models.current
+        ?.whereType<ModelLocal>()
+        .firstOrNull;
+    if (message.isEmpty || _reply != null || local == null) return;
+    final LocalChatSession session;
+    try {
+      session = _session ??= await widget.yonc.localChat.session(local);
+    } on YoncException catch (e) {
+      widget.onError('${e.code.name}: ${e.message}');
+      return;
+    }
+    setState(() {
+      _question = message;
+      _answer = '';
+      _error = null;
+      _draft.clear();
+    });
+    // Cold: listening starts the turn, cancelling the subscription stops it.
+    _reply = session
+        .send(message)
+        .listen(
+          (TokenEvent event) {
+            if (!event.thinking) setState(() => _answer += event.text);
+          },
+          onError: (Object e) {
+            setState(
+              () => _error = e is YoncException
+                  ? '${e.code.name}: ${e.message}'
+                  : '$e',
+            );
+            _turnEnded(session);
+          },
+          onDone: () => _turnEnded(session),
+          cancelOnError: true,
+        );
+  }
+
+  /// The session's history is the truth: a completed, stopped or failed reply all leave their
+  /// text there (a stopped one keeps what the user saw).
+  Future<void> _turnEnded(LocalChatSession session) async {
+    _reply = null;
+    final List<ChatMessage> history = await session.history();
+    if (!mounted) return;
+    setState(() {
+      _history = history;
+      _question = null;
+      _answer = '';
+    });
+  }
+
+  /// Stops the reply in flight; what the user saw stays in the history.
+  Future<void> _stop() async {
+    final StreamSubscription<TokenEvent>? reply = _reply;
+    final LocalChatSession? session = _session;
+    if (reply == null || session == null) return;
+    await reply.cancel();
+    await _turnEnded(session);
+  }
+
+  /// Ends the conversation: a reply in flight stops, the history is discarded and, unless Turbo
+  /// is on, the model is unloaded. The next message opens a new conversation and loads the model
+  /// again. A real app calls `close()` when its chat screen closes.
+  Future<void> _close() async {
+    await _reply?.cancel();
+    _reply = null;
+    await _session?.close();
+    _session = null;
+    if (!mounted) return;
+    setState(() {
+      _history = <ChatMessage>[];
+      _question = null;
+      _answer = '';
+      _error = null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: StreamBuilder<ChatAvailability>(
+        stream: widget.yonc.localChat.availability,
+        builder: (context, availability) {
+          final bool ready = availability.data == ChatAvailability.ready;
+          final bool replying = _question != null;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                'On-device chat',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              Text(
+                availabilityLabel(availability.data),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 8),
+              for (final ChatMessage m in _history)
+                _ChatLine(
+                  who: m.role == ChatRole.model ? 'Model' : 'You',
+                  text: m.content,
+                ),
+              if (_question case final String question) ...<Widget>[
+                _ChatLine(who: 'You', text: question),
+                _ChatLine(who: 'Model', text: _answer.isEmpty ? '…' : _answer),
+              ],
+              if (_error case final String error)
+                Text(
+                  error,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              TextField(
+                controller: _draft,
+                enabled: ready && !replying,
+                decoration: const InputDecoration(labelText: 'Message'),
+              ),
+              Row(
+                children: <Widget>[
+                  if (replying)
+                    TextButton(onPressed: _stop, child: const Text('Stop'))
+                  else
+                    TextButton(
+                      onPressed: ready ? _send : null,
+                      child: const Text('Send'),
+                    ),
+                  const Spacer(),
+                  if (_history.isNotEmpty || replying)
+                    TextButton(
+                      onPressed: _close,
+                      child: const Text('Close chat'),
+                    ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    ),
+  );
+}
+
+class _ChatLine extends StatelessWidget {
+  const _ChatLine({required this.who, required this.text});
+
+  final String who;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          who,
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: Theme.of(context).colorScheme.primary),
+        ),
+        Text(text),
+      ],
     ),
   );
 }
@@ -423,6 +628,16 @@ class _AccountCardState extends State<AccountCard> {
     ),
   );
 }
+
+/// Whether a message can run now. Chat and Turbo share the device's one engine.
+String availabilityLabel(ChatAvailability? a) => switch (a) {
+  ChatAvailability.ready =>
+    'Runs on this phone with the downloaded model; nothing leaves the device. '
+        'Works only while Turbo is off.',
+  ChatAvailability.noModel => 'No model on the device yet.',
+  ChatAvailability.turboOn => 'Turbo is on: switch it off to chat.',
+  null => 'Waiting for the SDK…',
+};
 
 /// What the user does about each condition.
 String conditionLabel(SafeCondition c) => switch (c) {

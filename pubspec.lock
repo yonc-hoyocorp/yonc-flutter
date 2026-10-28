@@ -63,18 +63,18 @@ packages:
     dependency: transitive
     description:
       name: vector_math
-      sha256: "92b9910f66ed1057fd4da7b040ae7c74cafacf885bdc81be496928d5049b032d"
+      sha256: fa49e1674cb84acb900141714e6c6e1f9ae099827c24d141430ff6819db4e1bc
       url: "https://pub.dev"
     source: hosted
-    version: "2.4.3"
+    version: "2.4.4"
   yonc_flutter:
     dependency: "direct main"
     description:
       name: yonc_flutter
-      sha256: a6f80a0c8e1d075f92d48dbb2be7e2cb0b5f0b8b6ca480360d0f10a224772f84
+      sha256: "0f4265a1d6998d303176254f2da68a614bee33b9aba0c532cddad145be7248cc"
       url: "https://ymm.jfrog.io/artifactory/api/pub/flutter-yonc-pub/"
     source: hosted
-    version: "0.5.0"
+    version: "0.6.1"
 sdks:
   dart: ">=3.13.2 <4.0.0"
   flutter: ">=3.44.0"
