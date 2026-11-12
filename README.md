@@ -8,7 +8,7 @@ from one Dart file.
 
 The app takes the plugin from the YOnC Pub repository, and the plugin resolves the native SDKs
 (an Android library and an iOS Swift package) from the YOnC artifact server when the app builds.
-This sample is on plugin 0.6.1, which embeds SDK 0.6.1.
+This sample is on plugin 0.6.2, which embeds SDK 0.6.2.
 
 One screen, `lib/main.dart`:
 
@@ -158,9 +158,9 @@ await session.close();                      // end the conversation: history dis
   (`metrics.ttftMs`, `metrics.decodeTokenCount`, `metrics.decodeTokS`). A stopped or failed turn
   keeps its partial answer in the history, and the next message continues.
 - **Errors** end the stream as a `YoncException`: `chatUnavailable` (Turbo on, also mid-turn; or a
-  model no longer on the device when the session starts, reason `noModel`) or `sdkFailure` (the
-  model could not be loaded or is damaged — delete and download it again —, the engine stopped, or a
-  turn was already streaming in this session). The next message retries. Any call on a closed
+  model no longer on the device when the session starts, reason `noModel`), `chatBusy` (a turn was
+  already streaming in this session) or `sdkFailure` (the model could not be loaded or is damaged —
+  delete and download it again —, or the engine stopped). The next message retries. Any call on a closed
   session throws a `StateError`.
 - **Lifecycle.** While a chat is in use, the engine keeps the model loaded (on Android in its own
   process, with the engine notification showing). `close()` ends the conversation for good: a turn

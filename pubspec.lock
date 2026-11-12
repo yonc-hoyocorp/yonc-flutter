@@ -71,10 +71,10 @@ packages:
     dependency: "direct main"
     description:
       name: yonc_flutter
-      sha256: "0f4265a1d6998d303176254f2da68a614bee33b9aba0c532cddad145be7248cc"
+      sha256: "907fd0a4616c8af5e3c3ccfac53340e82e4488476a468fef88b83ba09246b29f"
       url: "https://ymm.jfrog.io/artifactory/api/pub/flutter-yonc-pub/"
     source: hosted
-    version: "0.6.1"
+    version: "0.6.2"
 sdks:
   dart: ">=3.13.2 <4.0.0"
   flutter: ">=3.44.0"
